@@ -4,15 +4,15 @@
  * @LastEditTime: 2020-12-02 15:16:04
  * @Description: 爱奇艺每日签到和会员抽奖
  * @FilePath: \iqy_checkin\iqiyi.js
- * @交流群:1091479780
  */
 const axios = require('axios');
 /**
  * 这里的cookie需要在app端 个人中心处抓包 在url里搜authcookie
  * 不是请求头里的cookie
  * 例子：e6Um38snn9zAGBdrEkMgqWLsm3RO97pfAhwJi84ypALsm3qM0JfHGlvXm3le5***********
+ * 新增消息通知 在config中配置key(server酱和bark)
  */
-const { cookies } = require('./config.json');
+const { cookies, sendKey, bark } = require('./config.json');
 
 exports.main_handler = () => {
   sign();
@@ -71,9 +71,20 @@ function lottery(cookie) {
         return axios.get(`https://iface2.iqiyi.com/aggregate/3.0/lottery_activity?app_k=0&app_v=0&platform_id=0&dev_os=0&dev_ua=0&net_sts=0&qyid=0&psp_uid=0&psp_cki=${cookie}&psp_status=0&secure_p=0&secure_v=0&req_sn=0`);
       });
       Promise.all(promises).then((res) => {
-        res.forEach((r) => {
-          console.log(r.data.awardName || r.data.kv);
-        });
+        for (let i = 0; i < res.length; i++) {
+          const kv = res[i].data ? res[i].data.kv : "";
+          const awardName = res[i].data ? res[i].data.awardName : "";
+          if (kv && kv.msg && kv.msg.indexOf("异常") !== -1) {
+            if (sendKey) {
+              axios.get(`https://sctapi.ftqq.com/${sendKey}.send?title=${encodeURI("爱奇艺抽奖cookie失效")}`);
+            }
+            if (bark) {
+              axios.get(`https://api.day.app/${bark}/${encodeURI("爱奇艺抽奖cookie失效")}`);
+            }
+            return;
+          }
+          console.log(awardName || kv);
+        }
       });
     })
 }
