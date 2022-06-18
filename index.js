@@ -18,7 +18,7 @@ const cookies = [''];
 // 新增消息通知
 const sendKey = ''; // server酱
 const bark = ''; // bark app
-const push = '5c38fe0dccfc49fba313f337aa248c0b'; // pushplus
+const push = ''; // pushplus
 
 const serverSend = (title) => {
   const url = `https://sctapi.ftqq.com/${sendKey}.send?title=${encodeURI(title)}`;
@@ -85,7 +85,6 @@ function sign() {
 
     await dailyTask(cookie);
 
-    // await lottery(cookie);
   })
 }
 
