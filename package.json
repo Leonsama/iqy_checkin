@@ -18,6 +18,9 @@
   },
   "homepage": "https://github.com/jiangyaoOMG/iqiyi#readme",
   "dependencies": {
-    "axios": "^0.19.2"
+    "axios": "^0.19.2",
+    "cookie": "^0.5.0",
+    "crypto-js": "^4.1.1",
+    "query-string": "^7.1.1"
   }
 }

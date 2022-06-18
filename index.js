@@ -6,42 +6,96 @@
  * @FilePath: \iqy_checkin\iqiyi.js
  */
 const axios = require('axios');
+const cookieParser = require('cookie');
+const cryptoJs = require('crypto-js');
+const queryString = require('query-string');
 /**
- * 这里的cookie需要在app端 个人中心处抓包 在url里搜authcookie
- * 不是请求头里的cookie
- * 例子：e6Um38snn9zAGBdrEkMgqWLsm3RO97pfAhwJi84ypALsm3qM0JfHGlvXm3le5***********
- * 新增消息通知 在config中配置key(server酱和bark)
+ * 修改cookie为请求头中整个cookie 并将config中cookie修改为在下方填写
+ * cookie注意网页cookie在请求头中不要右键copy value，请手动复制！！！且用'单引号'填入下方数组！多个同理
  */
-const { cookies, sendKey, bark } = require('./config.json');
+const cookies = [''];
 
-exports.main_handler = () => {
-  sign();
+// 新增消息通知
+const sendKey = ''; // server酱
+const bark = ''; // bark app
+const push = '5c38fe0dccfc49fba313f337aa248c0b'; // pushplus
+
+const serverSend = (title) => {
+  const url = `https://sctapi.ftqq.com/${sendKey}.send?title=${encodeURI(title)}`;
+  axios.get(url);
 }
 
+const barkSend = (title) => {
+  const url = `https://api.day.app/${bark}/${encodeURI(title)}`;
+  axios.get(url);
+}
+
+
+const pushSend = (title) => {
+  const url = `https://www.pushplus.plus/send?token=${push}&content=${encodeURI(title)}`;
+  axios.get(url);
+}
+
+const sendMsg = (title) => {
+  if (sendKey) {
+    serverSend(title);
+  }
+  if (bark) {
+    barkSend(title);
+  }
+  if (push) {
+    pushSend(title);
+  }
+}
+
+let isLottery = true; // true查询 false抽奖
+
+const parseCookies = cookies.map(cookie => {
+  const cookie_ = cookieParser.parse(cookie);
+  return {
+    cookie,
+    authCookie: cookie_.P00001,
+    qyid: cookie_.QC005,
+    userId: cookie_.P00003,
+    dfp: cookie_.__dfp,
+  }
+})
+
 function sign() {
-  let tasks = [];
-  let platform;
-  cookies.forEach(async (cookie) => {
-    const headers = { Cookie: cookie };
-    platform = getPlatform(cookie)
-    if (!platform) { return; }
-    await checkin(cookie, platform);
-    await lottery(cookie);
-    const res = await getTasks(cookie);
-    const daily = {data: {data: {tasks: {}}}, ...res};
-    tasks = [...daily.data.data.tasks.daily] || [];
-    if (!tasks.length) {
-      console.log("获取任务失败");
-      return;
+  parseCookies.forEach(async (cookie) => {
+    let check;
+    try {
+      check = await checkin(cookie);
+    } catch (error) {
+      console.log("签到发生错误：" + error);
+      sendMsg("iqy签到发生错误：" + error);
     }
-    completeTasks(cookie, tasks);
-    getReward(cookie, tasks);
+    if (check.data && (check.data.code !== "A00000" || !check.data.data.success)) {
+      console.log(check.data);
+      sendMsg("iqy签到发生错误：" + JSON.stringify(check.data));
+    } else {
+      console.log(check.data);
+      const reward = check?.data?.data?.data?.rewards.find(reward => reward.rewardType === 1) || {};
+      console.log("今日签到成长值：" + reward.rewardCount)
+      sendMsg("iqy今日签到成长值：" + reward.rewardCount);
+    }
+
+
+    await lottery(cookie);
+
+    await dailyTask(cookie);
+
+    // await lottery(cookie);
   })
 }
 
 async function getPlatform(cookie) {
   const url = 'https://static.iqiyi.com/js/qiyiV2/20200212173428/common/common.js';
-  const res = await axios.get(url, { headers: { Cookie: cookie } });
+  const res = await axios.get(url, {
+    headers: {
+      Cookie: cookie
+    }
+  });
   const platform = /platform:\"(.*?)\"/.exec(res.data);
   return platform;
 }
@@ -50,85 +104,125 @@ async function getPlatform(cookie) {
  * 抽奖
  * @param {*} cookie 
  */
-function lottery(cookie) {
-  const url = `https://cards.iqiyi.com/views_category/3.0/vip_home?secure_p=iPhone&scrn_scale=0&dev_os=0&ouid=0&layout_v=6&psp_cki=${cookie}&page_st=suggest&app_k=8e48946f144759d86a50075555fd5862&dev_ua=iPhone8%2C2&net_sts=1&cupid_uid=0&xas=1&init_type=6&app_v=11.4.5&idfa=0&app_t=0&platform_id=0&layout_name=0&req_sn=0&api_v=0&psp_status=0&psp_uid=451953037415627&qyid=0&secure_v=0&req_times=0`;
-  const headers = {
-    'sign': '7fd8aadd90f4cfc99a858a4b087bcc3a',
-    't': '479112291'
+async function lottery(cookie) {
+  let daysurpluschance = 0;
+  const res = await lottery_activity(cookie, isLottery);
+  console.log(res.data);
+  daysurpluschance = parseInt(res.data.daysurpluschance || 0);
+  isLottery = false;
+  if (daysurpluschance === 0) {
+    sendMsg("iqy今日已抽奖");
+    return console.log("今日已抽奖");
+  }
+  console.log(`今日可抽奖${daysurpluschance}次`);
+  for (let i = 0; i < daysurpluschance; i++) {
+    const lotteryRes = await lottery_activity(cookie, isLottery);
+    console.log(lotteryRes.data);
+  }
+  sendMsg("iqy抽奖已完成");
+}
+
+async function lottery_activity(cookie, isLottery) {
+  const data = {
+    "app_k": "b398b8ccbaeacca840073a7ee9b7e7e6",
+    "app_v": "11.6.5",
+    "platform_id": 10,
+    "dev_os": "8.0.0",
+    "dev_ua": "FRD-AL10",
+    "net_sts": 1,
+    "qyid": cookie.qyid,
+    "psp_uid": cookie.userId,
+    "psp_cki": cookie.authCookie,
+    "psp_status": 3,
+    "secure_p": "GPhone",
+    "secure_v": 1,
+    "req_sn": new Date().getTime(),
+    lottery_chance: isLottery ? 1 : 0
   };
-  return axios.get(url, { headers })
-    .then(res => {
-      let data;
-      try {
-        data = JSON.stringify(res.data);
-      } catch (error) {
-      }
-      if (data.match(/\"text\":\"\d.+?到期\"/)) {
-        const end = data.match(/\"text\":\"(\d.+?到期)\"/)[1];
-        console.log(end);
-      }
-      const promises = new Array(3).fill('').map(() => {
-        return axios.get(`https://iface2.iqiyi.com/aggregate/3.0/lottery_activity?app_k=0&app_v=0&platform_id=0&dev_os=0&dev_ua=0&net_sts=0&qyid=0&psp_uid=0&psp_cki=${cookie}&psp_status=0&secure_p=0&secure_v=0&req_sn=0`);
-      });
-      Promise.all(promises).then((res) => {
-        for (let i = 0; i < res.length; i++) {
-          const kv = res[i].data ? res[i].data.kv : "";
-          const awardName = res[i].data ? res[i].data.awardName : "";
-          if (kv && kv.msg && kv.msg.indexOf("异常") !== -1) {
-            if (sendKey) {
-              axios.get(`https://sctapi.ftqq.com/${sendKey}.send?title=${encodeURI("爱奇艺抽奖cookie失效")}`);
-            }
-            if (bark) {
-              axios.get(`https://api.day.app/${bark}/${encodeURI("爱奇艺抽奖cookie失效")}`);
-            }
-            return;
-          }
-          console.log(awardName || kv);
-        }
-      });
-    })
+  const url = "https://iface2.iqiyi.com/aggregate/3.0/lottery_activity?" + queryString.stringify(data);
+  return axios.get(url);
 }
 
-function checkin(cookie, platform) {
-  const url = `https://tc.vip.iqiyi.com/taskCenter/task/userSign?P00001=${cookie}&platform=${platform[1]}&lang=zh_CN&app_lm=cn&deviceID=pcw-pc&version=v2`;
-  const headers = { Cookie: cookie };
-  return axios.get(url, { headers })
-    .then(res => { 
-      console.log("今日签到成长值：" + res.data.data.todayGrowth) 
-    })
+function checkin(cookie) {
+  const timestamp = new Date().getTime();
+  const sign = cryptoJs.MD5("agentType=1|agentversion=1.0|appKey=basic_pcw|authCookie=" + cookie.authCookie + "|qyid=" + cookie.qyid + "|task_code=natural_month_sign|timestamp=" + timestamp + "|typeCode=point|userId=" + cookie.userId + "|UKobMjDMsDoScuWOfp6F")
+  const url = `https://community.iqiyi.com/openApi/task/execute?agentType=1&agentversion=1.0&appKey=basic_pcw&authCookie=${cookie.authCookie}&qyid=${cookie.qyid}&task_code=natural_month_sign&timestamp=${timestamp}&typeCode=point&userId=${cookie.userId}&sign=${sign}`;
+  const data = {
+    "natural_month_sign": {
+      "agentType": 1,
+      "agentversion": 1,
+      "authCookie": cookie.authCookie,
+      "qyid": cookie.qyid,
+      "verticalCode": "iQIYI",
+      "taskCode": "iQIYI_mofhr"
+    }
+  }
+  const headers = {
+    Cookie: cookie,
+    "Content-Type": "application/json"
+  };
+  return axios.post(url, data, {
+    headers
+  });
 }
 
-/**
- * 获取日常任务
- * @param {*} cookie 
- */
-function getTasks(cookie) {
-  const headers = { Cookie: cookie };
-  const url = "https://tc.vip.iqiyi.com/taskCenter/task/queryUserTask?P00001=" + cookie;
-  return axios.get(url, { headers })
+async function dailyTask(cookie) {
+  const taskcodeList = [{
+    code: '8ba31f70013989a8',
+    name: '每日观影成就'
+  }, {
+    code: 'freeGetVip',
+    name: '浏览会员兑换活动'
+  }, {
+    code: 'GetReward',
+    name: '逛领福利频道'
+  }];
+  let url;
+  let res;
+  for (let i = 0; i < taskcodeList.length; i++) {
+    const task = taskcodeList[i];
+     // 领任务
+     url = `https://tc.vip.iqiyi.com/taskCenter/task/joinTask?P00001=${cookie.authCookie}&taskCode=${task.code}&platform=b6c13e26323c537d&lang=zh_CN&app_lm=cn`;
+     res = await axios.get(url);
+     if (res.data.code === 'A00000') {
+       console.log(`领取${task.name}任务成功`);
+       await sleep(10000)
+     } else {
+      console.log(`已完成${task.name}`);
+      continue;
+     }
+ 
+     // 完成任务
+     url = `https://tc.vip.iqiyi.com/taskCenter/task/notify?taskCode=${task.code}&P00001=${cookie.authCookie}&platform=b6c13e26323c537d&lang=cn&bizSource=component_browse_timing_tasks&_=${new Date().getTime()}`;
+     res = await axios.get(url);
+     if (res.data.code === 'A00000') {
+       console.log(`完成${task.name}任务成功`);
+       await sleep(2000)
+     }
+ 
+     // 领取奖励
+     url = `https://tc.vip.iqiyi.com/taskCenter/task/getTaskRewards?P00001=${cookie.authCookie}&taskCode=${task.code}&lang=zh_CN&platform=b6c13e26323c537d`;
+     res = await axios.get(url);
+     try {
+       const price = res.data.dataNew[0].value;
+       console.log(`领取${task.name}任务奖励成功, 获得${price}点成长值`);
+     } catch (error) {
+       console.log(`领取${task.name}任务奖励出错`);
+     }
+     await sleep(5000);
+  }
+  sendMsg("iqy每日任务已完成");
+}
+
+const sleep = (ts) => {
+  return new Promise((resolve) => setTimeout(resolve, ts));
+}
+
+function random(min, max) {
+  return Math.round(Math.random() * (max - min)) + min;
 }
 
 
-function completeTasks(cookie, tasks) {
-  const Promises = tasks.map(task => {
-    const url = `https://tc.vip.iqiyi.com/taskCenter/task/joinTask?P00001=${cookie}&taskCode=${task.taskCode}&platform=bb136ff4276771f3&lang=zh_CN`;
-    return axios.get(url);
-  })
-  Promise.all(Promises).then(res => {
-    res.forEach(r => {
-      console.log(r.data);
-    })
-  })
-}
-
-function getReward(cookie, tasks) {
-  const Promises = tasks.map(task => {
-    const url = `https://tc.vip.iqiyi.com/taskCenter/task/getTaskRewards?P00001=${cookie}&taskCode=${task.taskCode}&platform=bb136ff4276771f3&lang=zh_CN`;
-    return axios.get(url);
-  })
-  Promise.all(Promises).then(res => {
-    res.forEach((r, i) => {
-      console.log(tasks[i].name + ":" + tasks[i].taskReward.task_reward_growth + "成长值");
-    })
-  })
+exports.main_handler = () => {
+  sign();
 }
