@@ -12,9 +12,20 @@ const queryString = require('query-string');
 /**
  * 修改cookie为请求头中整个cookie 并将config中cookie修改为在下方填写
  * cookie注意网页cookie在请求头中不要右键copy value，请手动复制！！！且用'单引号'填入下方数组！多个同理
+ * 可以使用青龙环境变量添加cookie 请用&连接多个cookie 变量名为 IQY_COOKIE
  */
-const cookies = [''];
+ let cookies = [''];
 
+ if (process.env.IQY_COOKIE) {
+     if (process.env.IQY_COOKIE.indexOf('&') > -1) {
+     cookies = process.env.IQY_COOKIE.split('&');
+   } else if (process.env.IQY_COOKIE.indexOf('\n') > -1) {
+     cookies = process.env.IQY_COOKIE.split('\n');
+   } else {
+     cookies = [process.env.IQY_COOKIE];
+   }
+ }
+ 
 // 新增消息通知
 const sendKey = ''; // server酱
 const bark = ''; // bark app
@@ -222,6 +233,8 @@ function random(min, max) {
 }
 
 
-exports.main_handler = () => {
+exports.handler = () => {
   sign();
 }
+
+sign();
