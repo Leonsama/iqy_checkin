@@ -72,31 +72,32 @@ const parseCookies = cookies.map(cookie => {
   }
 })
 
-function sign() {
-  parseCookies.forEach(async (cookie) => {
+async function sign() {
+  for (let index = 0; index < parseCookies.length; i++) {
+    const cookie = parseCookies[index];
     let check;
     try {
       check = await checkin(cookie);
     } catch (error) {
-      console.log("签到发生错误：" + error);
-      sendMsg("iqy签到发生错误：" + error);
+      console.log(`cookie${index}：iqy签到发生错误：${error}`);
+      sendMsg(`cookie${index}：iqy签到发生错误：${error}`);
     }
     if (check.data && (check.data.code !== "A00000" || !check.data.data.success)) {
-      console.log(check.data);
-      sendMsg("iqy签到发生错误：" + JSON.stringify(check.data));
+      console.log(`cookie${index}` + check.data);
+      sendMsg(`cookie${index}：iqy签到发生错误：${JSON.stringify(check.data)}`);
     } else {
-      console.log(check.data);
+      console.log(`cookie${index}：` + JSON.stringify(check.data));
       const reward = check?.data?.data?.data?.rewards.find(reward => reward.rewardType === 1) || {};
-      console.log("今日签到成长值：" + reward.rewardCount)
-      sendMsg("iqy今日签到成长值：" + reward.rewardCount);
+      console.log(`cookie${index}：今日签到成长值：${reward.rewardCount}`)
+      sendMsg(`cookie${index}：今日签到成长值：${reward.rewardCount}`);
     }
 
 
-    await lottery(cookie);
+    await lottery(cookie, index);
 
-    await dailyTask(cookie);
+    await dailyTask(cookie, index);
 
-  })
+  }
 }
 
 async function getPlatform(cookie) {
@@ -114,22 +115,22 @@ async function getPlatform(cookie) {
  * 抽奖
  * @param {*} cookie 
  */
-async function lottery(cookie) {
+async function lottery(cookie, index) {
   let daysurpluschance = 0;
   const res = await lottery_activity(cookie, isLottery);
   console.log(res.data);
   daysurpluschance = parseInt(res.data.daysurpluschance || 0);
   isLottery = false;
   if (daysurpluschance === 0) {
-    sendMsg("iqy今日已抽奖");
-    return console.log("今日已抽奖");
+    sendMsg(`cookie${index}：iqy今日已抽奖`);
+    return console.log(`cookie${index}：iqy今日已抽奖`);
   }
-  console.log(`今日可抽奖${daysurpluschance}次`);
+  console.log(`cookie${index}：今日可抽奖${daysurpluschance}次`);
   for (let i = 0; i < daysurpluschance; i++) {
     const lotteryRes = await lottery_activity(cookie, isLottery);
     console.log(lotteryRes.data);
   }
-  sendMsg("iqy抽奖已完成");
+  sendMsg(`cookie${index}：iqy抽奖已完成`);
 }
 
 async function lottery_activity(cookie, isLottery) {
@@ -176,7 +177,7 @@ function checkin(cookie) {
   });
 }
 
-async function dailyTask(cookie) {
+async function dailyTask(cookie, index) {
   const taskcodeList = [{
     code: '8ba31f70013989a8',
     name: '每日观影成就'
@@ -195,10 +196,10 @@ async function dailyTask(cookie) {
      url = `https://tc.vip.iqiyi.com/taskCenter/task/joinTask?P00001=${cookie.authCookie}&taskCode=${task.code}&platform=b6c13e26323c537d&lang=zh_CN&app_lm=cn`;
      res = await axios.get(url);
      if (res.data.code === 'A00000') {
-       console.log(`领取${task.name}任务成功`);
+       console.log(`cookie${index}：领取${task.name}任务成功`);
        await sleep(10000)
      } else {
-      console.log(`已完成${task.name}`);
+      console.log(`cookie${index}：已完成${task.name}`);
       continue;
      }
  
@@ -206,7 +207,7 @@ async function dailyTask(cookie) {
      url = `https://tc.vip.iqiyi.com/taskCenter/task/notify?taskCode=${task.code}&P00001=${cookie.authCookie}&platform=b6c13e26323c537d&lang=cn&bizSource=component_browse_timing_tasks&_=${new Date().getTime()}`;
      res = await axios.get(url);
      if (res.data.code === 'A00000') {
-       console.log(`完成${task.name}任务成功`);
+       console.log(`cookie${index}：完成${task.name}任务成功`);
        await sleep(2000)
      }
  
@@ -215,13 +216,13 @@ async function dailyTask(cookie) {
      res = await axios.get(url);
      try {
        const price = res.data.dataNew[0].value;
-       console.log(`领取${task.name}任务奖励成功, 获得${price}点成长值`);
+       console.log(`cookie${index}：领取${task.name}任务奖励成功, 获得${price}点成长值`);
      } catch (error) {
-       console.log(`领取${task.name}任务奖励出错`);
+       console.log(`cookie${index}：领取${task.name}任务奖励出错`);
      }
      await sleep(5000);
   }
-  sendMsg("iqy每日任务已完成");
+  sendMsg(`cookie${index}：iqy每日任务已完成`);
 }
 
 const sleep = (ts) => {
