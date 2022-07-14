@@ -73,7 +73,7 @@ const parseCookies = cookies.map(cookie => {
 })
 
 async function sign() {
-  for (let index = 0; index < parseCookies.length; i++) {
+  for (let index = 0; index < parseCookies.length; index++) {
     const cookie = parseCookies[index];
     let check;
     try {
